@@ -45,22 +45,11 @@ def loss(logits, labels):
   loss = tf.reduce_mean(cross_entropy)
   return loss
 
-
 def __main__():
-
-    train_set, validation_set, test_set = mnist.load_mnist()
 
     input_images_placeholder = tf.placeholder(tf.float32, shape=(BATCH_SIZE, IMAGE_PIXELS))
     input_deltas_placeholder = tf.placeholder(tf.float32, shape=(BATCH_SIZE, NB_INSTANTIA_PARAMS - 1))
     output_images_placeholder = tf.placeholder(tf.float32, shape=(BATCH_SIZE, IMAGE_PIXELS))
-
-    images_feed, labels_feed = train_set.next_batch(BATCH_SIZE)
-
-    feed_dict = {
-        input_images_placeholder: images_feed,
-        input_deltas_placeholder: np.zeros([2]),
-        output_images_placeholder: labels_feed,
-    }
 
     output = tf.Variable(tf.zeros([IMAGE_PIXELS, IMAGE_PIXELS]))
     for i in range(NB_CAPSULE):
@@ -76,10 +65,22 @@ def __main__():
 
     session.run(init)
 
+    saver = tf.train.Saver()
+
+    train_set = mnist.dataset()
+
     for i in tqdm(range(NB_TRAIN_EPOCH)):
+        delta = np.zeros([2])
+        images_feed, labels_feed = train_set.next_batch(BATCH_SIZE, delta)
+        feed_dict = {
+            input_images_placeholder: images_feed,
+            input_deltas_placeholder: delta,
+            output_images_placeholder: labels_feed,
+        }
         _, loss_value = session.run([train, loss_op], feed_dict=feed_dict)
         if i % 10 == 0:
-            print loss_value
+            print "loss", loss_value
+            saver.save(session, "./model")
 
 
 if __name__ == "__main__":
