@@ -19,28 +19,34 @@ class dataset:
         self.image_train /= 255
         self.image_test /= 255
 
-    def next_batch(self, batchSize, delta):
-        if self.train_counter >= 60000 / batchSize:
-            self.train_counter = 0
-        #input_images = self.image_train[random.sample(range(0, 10000), batchSize), :]
-        input_images = self.image_train[self.train_counter * batchSize : (self.train_counter + 1) * batchSize, :]
-        self.train_counter += 1
-        #output_image = np.zeros([batchSize, 784])
-        """
-        for i in range(batchSize):
-            for y in range(28):
-                for x in range(28):
-                    new_x = x + delta[0][0];
-                    new_y = y + delta[0][1]
-                    if new_x < 28 and new_y < 28 and new_x >= 0 and new_y >= 0:
-                        output_image[i][new_x + new_y * 28] = input_images[i][x + y * 28]
-        """
-        return input_images, input_images
+    def imgGenerator(self, batchSz, deltaParamNum, sampleRange=10000):
+        sampleRange /= batchSz
+        counter = 0
+        cached = False
+        imageCache = []
+        labelCache = []
+        deltaCache = []
+        while(1):
+            if(not cached):
+                delta = np.random.randint(low=-2, high=3, size=(batchSz, deltaParamNum))  # 随机位移
+                deltaCache.append(delta)
+                imageCache.append(self.image_train[counter * batchSz : (counter + 1) * batchSz])
+                output_image = np.zeros([batchSz, 784])
+                for i in range(batchSz):
+                    for y in range(28):
+                        for x in range(28):
+                            new_x = x + delta[i][0];
+                            new_y = y + delta[i][1]
+                            if new_x < 28 and new_y < 28 and new_x >= 0 and new_y >= 0:
+                                output_image[i][new_x + new_y * 28] = imageCache[counter][i][x + y * 28]
 
-    def next_test_batch(self, batchSize, delta):
-        if self.test_counter >= 60000 / batchSize:
-            self.test_counter = 0
-        input_images = self.image_train[self.test_counter * batchSize: (self.test_counter + 1) * batchSize, :]
-        self.test_counter += 1
-        return input_images, input_images
+                labelCache.append(output_image)
 
+            yield imageCache[counter], \
+                  labelCache[counter], \
+                  deltaCache[counter]
+
+            counter +=1
+            if(counter >= sampleRange):
+                counter = 0
+                cached = True

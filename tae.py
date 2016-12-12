@@ -14,9 +14,10 @@ NB_HIDDEN2_UNITS = 20
 NB_INSTANTIA_PARAMS = 3     # 特征数量+1(包括p)
 
 BATCH_SIZE = 32
-TRAIN_EPOCH = 10000
+TRAIN_EPOCH = 50
 LEARNING_RATE = 1e-2
-SAVE_PERIOD = 10000
+SAVE_PERIOD = 21
+SAMPLE_RANGE = 60000
 
 
 def dense_layer(_x, nb_last_units, nb_this_units):
@@ -43,21 +44,21 @@ def capsule(images, delta):
     p = tf.reshape(hidden2[:, 2], shape=[BATCH_SIZE,1])
 
     instantiation_params = hidden2[:, 0:2]  # 高层次表达实例化参数（这里是x，y坐标）
-    #instantiation_params += delta       # 对其应用某种改变（这里是平移）
+    instantiation_params += delta       # 对其应用某种改变（这里是平移）
 
     # 重新生成图片（decoder）
     hidden3 = tf.nn.sigmoid(
         dense_layer(instantiation_params, NB_INSTANTIA_PARAMS - 1, NB_HIDDEN2_UNITS))
 
     # 利用p重新计算输出图片
-    capsule_output_images = gen_math_ops.mul(p,tf.nn.sigmoid(dense_layer(hidden3, NB_HIDDEN2_UNITS, IMAGE_PIXELS)))
+    capsule_output_images = gen_math_ops.mul(p, dense_layer(hidden3, NB_HIDDEN2_UNITS, IMAGE_PIXELS))
 
     return capsule_output_images
 
 def loss(predicts, labels):
     # mse loss
-    loss = tf.reduce_mean(tf.square(predicts - labels))
-    #loss = tf.nn.sigmoid_cross_entropy_with_logits(predicts, labels)
+    #loss = tf.reduce_mean(tf.square(predicts - labels))
+    loss = tf.nn.sigmoid_cross_entropy_with_logits(predicts, labels)
     return loss
 
 
@@ -92,7 +93,7 @@ def __main__():
     loss_op = loss(output, output_images_placeholder)
 
     # 批随机梯度下降优化器
-    optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE)
+    optimizer = tf.train.GradientDescentOptimizer(LEARNING_RATE)
     train_op = optimizer.minimize(loss_op)
 
     session = tf.Session()
@@ -101,44 +102,48 @@ def __main__():
     saver = tf.train.Saver()
 
     print('Loading data')
-    train_set = mnist.dataset()     # mnist数据集`
+    train_set = mnist.dataset().imgGenerator(BATCH_SIZE, NB_INSTANTIA_PARAMS - 1, SAMPLE_RANGE)     # mnist数据集
 
-    # 进度条
-    progress_bar = tqdm(xrange(TRAIN_EPOCH))
+    for e in range(TRAIN_EPOCH):
+        # 进度条
+        progress_bar = tqdm(xrange(SAMPLE_RANGE / BATCH_SIZE))
 
-    print "start training"
+        loss_sum = 0
 
-    for i in progress_bar:
-        delta = np.zeros([BATCH_SIZE, 2])
-        #delta = np.random.randint(
-            #low=-2, high=3, size=(BATCH_SIZE, NB_INSTANTIA_PARAMS - 1))   # 随机位移
-        images_feed, labels_feed = train_set.next_batch(BATCH_SIZE, delta)
-        feed_dict = {
-            input_images_placeholder: images_feed,
-            input_deltas_placeholder: delta,
-            output_images_placeholder: labels_feed,
-        }
-        _, loss_value = session.run([train_op, loss_op], feed_dict=feed_dict)
-
-        progress_bar.set_description("loss =" + str(loss_value))
-        if (i + 1) % SAVE_PERIOD == 0:
-            saver.save(session, "./model/model")
-            images_feed, labels_feed = train_set.next_test_batch(BATCH_SIZE, delta)
+        for _ in progress_bar:
+            images_feed, labels_feed, delta = train_set.next()
             feed_dict = {
                 input_images_placeholder: images_feed,
                 input_deltas_placeholder: delta,
+                output_images_placeholder: labels_feed,
             }
-            test_output = session.run(output, feed_dict=feed_dict)
-            plot(images_feed)
-            plot(test_output)
+            _, loss_value = session.run([train_op, loss_op], feed_dict=feed_dict)
 
-            ph1 =tf.placeholder(tf.float32, shape=(None, IMAGE_PIXELS))
-            ph2 = tf.placeholder(tf.float32, shape=(None, IMAGE_PIXELS))
-            loss_op_t = loss(ph1, ph2)
+            progress_bar.set_description("epoch %d, loss = %.4f" %(e, np.mean(loss_value)))
+            loss_sum += np.mean(loss_value)
 
-            test_loss = session.run(loss_op_t, feed_dict={ph1:test_output, ph2:images_feed})
-            print test_loss
-    print "done"
+        print "avg loss = %.4f" % (loss_sum / SAMPLE_RANGE * BATCH_SIZE)
+
+        if (e) % SAVE_PERIOD == 0:
+            saver.save(session, "./model/model")
+
+
+    # for test loss
+    images_feed, labels_feed, delta = train_set.next()
+    feed_dict = {
+        input_images_placeholder: images_feed,
+        input_deltas_placeholder: delta,
+    }
+    test_output = session.run(output, feed_dict=feed_dict)
+    plot(images_feed)
+    plot(test_output)
+
+    ph1 = tf.placeholder(tf.float32, shape=(None, IMAGE_PIXELS))
+    ph2 = tf.placeholder(tf.float32, shape=(None, IMAGE_PIXELS))
+    loss_op_t = loss(ph1, ph2)
+
+    test_loss = session.run(loss_op_t, feed_dict={ph1: test_output, ph2: images_feed})
+    print np.mean(test_loss)
 
 
 if __name__ == "__main__":
