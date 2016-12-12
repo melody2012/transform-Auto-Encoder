@@ -26,7 +26,7 @@ def dense_layer(_x, nb_last_units, nb_this_units):
                                               stddev=1.0 / np.sqrt(float(nb_last_units))))
     biases = tf.Variable(tf.zeros([nb_this_units]))     # 偏置
     #layer = tf.nn.sigmoid(tf.matmul(_x, weights) + biases)
-    #return layer
+    # return layer
     return tf.matmul(_x, weights) + biases
 
 
@@ -41,7 +41,7 @@ def capsule(images, delta):
 
     # x, y, p
     # 这个胶囊的权重
-    p = tf.reshape(hidden2[:, 2], shape=[BATCH_SIZE,1])
+    p = tf.reshape(hidden2[:, 2], shape=[BATCH_SIZE, 1])
 
     instantiation_params = hidden2[:, 0:2]  # 高层次表达实例化参数（这里是x，y坐标）
     instantiation_params += delta       # 对其应用某种改变（这里是平移）
@@ -51,9 +51,11 @@ def capsule(images, delta):
         dense_layer(instantiation_params, NB_INSTANTIA_PARAMS - 1, NB_HIDDEN2_UNITS))
 
     # 利用p重新计算输出图片
-    capsule_output_images = gen_math_ops.mul(p, dense_layer(hidden3, NB_HIDDEN2_UNITS, IMAGE_PIXELS))
+    capsule_output_images = gen_math_ops.mul(
+        p, dense_layer(hidden3, NB_HIDDEN2_UNITS, IMAGE_PIXELS))
 
     return capsule_output_images
+
 
 def loss(predicts, labels):
     # mse loss
@@ -96,13 +98,17 @@ def __main__():
     optimizer = tf.train.GradientDescentOptimizer(LEARNING_RATE)
     train_op = optimizer.minimize(loss_op)
 
-    session = tf.Session()
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+
+    session = tf.Session(config=config)
     session.run(tf.global_variables_initializer())   # 初始化
 
     saver = tf.train.Saver()
 
     print('Loading data')
-    train_set = mnist.dataset().imgGenerator(BATCH_SIZE, NB_INSTANTIA_PARAMS - 1, SAMPLE_RANGE)     # mnist数据集
+    train_set = mnist.dataset().imgGenerator(
+        BATCH_SIZE, NB_INSTANTIA_PARAMS - 1, SAMPLE_RANGE)     # mnist数据集
 
     for e in range(TRAIN_EPOCH):
         # 进度条
@@ -117,16 +123,17 @@ def __main__():
                 input_deltas_placeholder: delta,
                 output_images_placeholder: labels_feed,
             }
-            _, loss_value = session.run([train_op, loss_op], feed_dict=feed_dict)
+            _, loss_value = session.run(
+                [train_op, loss_op], feed_dict=feed_dict)
 
-            progress_bar.set_description("epoch %d, loss = %.4f" %(e, np.mean(loss_value)))
+            progress_bar.set_description(
+                "epoch %d, loss = %.4f" % (e, np.mean(loss_value)))
             loss_sum += np.mean(loss_value)
 
         print "avg loss = %.4f" % (loss_sum / SAMPLE_RANGE * BATCH_SIZE)
 
         if (e) % SAVE_PERIOD == 0:
             saver.save(session, "./model/model")
-
 
     # for test loss
     images_feed, labels_feed, delta = train_set.next()
@@ -142,7 +149,8 @@ def __main__():
     ph2 = tf.placeholder(tf.float32, shape=(None, IMAGE_PIXELS))
     loss_op_t = loss(ph1, ph2)
 
-    test_loss = session.run(loss_op_t, feed_dict={ph1: test_output, ph2: images_feed})
+    test_loss = session.run(loss_op_t, feed_dict={
+                            ph1: test_output, ph2: images_feed})
     print np.mean(test_loss)
 
 
